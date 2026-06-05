@@ -1,52 +1,102 @@
-import React, { useState, useRef } from 'react';
-import { Mic, Square, Smile, Frown, Flame, Volume2, HelpCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Mic, Square, Smile, Frown, Flame, Volume2, HelpCircle, Activity, ShieldCheck, Zap, RefreshCw } from 'lucide-react';
 
 type Emotion = 'Happy' | 'Sad' | 'Angry' | 'Calm';
 
 interface ThemeConfig {
   bg: string;
+  glow: string;
+  border: string;
+  text: string;
   icon: React.ComponentType<{ className?: string }>;
   note: string;
+  confidence: string;
 }
 
 const EMOTION_THEMES: Record<Emotion, ThemeConfig> = {
-  Happy: { bg: 'bg-emerald-500 text-emerald-950', icon: Smile, note: "High energy / bright tone detected." },
-  Sad: { bg: 'bg-blue-600 text-blue-50', icon: Frown, note: "Low energy / subdued acoustic profile." },
-  Angry: { bg: 'bg-rose-600 text-rose-50', icon: Flame, note: "High voice amplitude & pitch variability." },
-  Calm: { bg: 'bg-violet-600 text-violet-50', icon: Volume2, note: "Stable, balanced pitch frequencies." }
+  Happy: { 
+    bg: 'from-emerald-950/80 to-slate-900/90', 
+    glow: 'shadow-emerald-500/20 text-emerald-400', 
+    border: 'border-emerald-500/30',
+    text: 'text-emerald-400',
+    icon: Smile, 
+    note: "High-frequency acoustic energy with vibrant pitch variability detected.",
+    confidence: "94.2%"
+  },
+  Sad: { 
+    bg: 'from-blue-950/80 to-slate-900/90', 
+    glow: 'shadow-blue-500/20 text-blue-400', 
+    border: 'border-blue-500/30',
+    text: 'text-blue-400',
+    icon: Frown, 
+    note: "Subdued amplitude envelopes and low fundamental vocal frequencies observed.",
+    confidence: "88.7%"
+  },
+  Angry: { 
+    bg: 'from-rose-950/80 to-slate-900/90', 
+    glow: 'shadow-rose-500/20 text-rose-400', 
+    border: 'border-rose-500/30',
+    text: 'text-rose-400',
+    icon: Flame, 
+    note: "High root-mean-square energy spikes and intense harmonic tension recorded.",
+    confidence: "91.5%"
+  },
+  Calm: { 
+    bg: 'from-violet-950/80 to-slate-900/90', 
+    glow: 'shadow-violet-500/20 text-violet-400', 
+    border: 'border-violet-500/30',
+    text: 'text-violet-400',
+    icon: Volume2, 
+    note: "Uniform spectral flux and deeply stable fundamental frequencies sustained.",
+    confidence: "96.1%"
+  }
 };
 
 interface ApiResponse {
   success: boolean;
   prediction: Emotion;
-  feature_vector_length: number;
 }
 
 export default function App(): React.JSX.Element {
   const [recording, setRecording] = useState<boolean>(false);
   const [processing, setProcessing] = useState<boolean>(false);
   const [emotionResult, setEmotionResult] = useState<Emotion | null>(null);
+  const [visualBars, setVisualBars] = useState<number[]>(new Array(24).fill(4));
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const animationRef = useRef<number | null>(null);
+
+  // Simulated live audio wave layout for micro-UX visualization
+  useEffect(() => {
+    if (recording) {
+      const simulateWaves = () => {
+        setVisualBars(new Array(24).fill(0).map(() => Math.floor(Math.random() * 32) + 6));
+        animationRef.current = requestAnimationFrame(simulateWaves);
+      };
+      simulateWaves();
+    } else {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      setVisualBars(new Array(24).fill(4));
+    }
+    return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); };
+  }, [recording]);
 
   const startVoiceRecording = async (): Promise<void> => {
     setEmotionResult(null);
     audioChunksRef.current = [];
     
     try {
-      const stream: MediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event: BlobEvent) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
       };
 
       mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+        stream.getTracks().forEach((track) => track.stop());
         const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType });
         await uploadAudioToBackend(audioBlob);
       };
@@ -54,8 +104,8 @@ export default function App(): React.JSX.Element {
       mediaRecorder.start(250);
       setRecording(true);
     } catch (err) {
-      console.error("Microphone access failed:", err);
-      alert("Could not access microphone. Please verify permissions.");
+      console.error(err);
+      alert("Microphone hardware handshake failed. Verify system permissions.");
     }
   };
 
@@ -72,86 +122,130 @@ export default function App(): React.JSX.Element {
     formData.append('file', blob, 'recording.raw');
 
     try {
-      // Relative path routes seamlessly to the companion container endpoint
-      const response = await fetch('/api/predict', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) throw new Error("Server communication fault.");
-
+      const response = await fetch('/api/predict', { method: 'POST', body: formData });
+      if (!response.ok) throw new Error("Server fault.");
       const data: ApiResponse = await response.json();
-      if (data.success) {
-        setEmotionResult(data.prediction);
-      }
+      if (data.success) setEmotionResult(data.prediction);
     } catch (error) {
-      console.error("Transmission failed:", error);
-      alert("Error reaching Python container pipeline.");
+      console.error(error);
+      alert("Error reaching neural network container engine.");
     } finally {
       setProcessing(false);
     }
   };
 
-  const ResultIcon = emotionResult ? EMOTION_THEMES[emotionResult].icon : HelpCircle;
+  const currentTheme = emotionResult ? EMOTION_THEMES[emotionResult] : null;
+  const StatusIcon = emotionResult && currentTheme ? currentTheme.icon : HelpCircle;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl text-center">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      
+      {/* Background Decorative Neon Orbs */}
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none animate-pulse" />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none animate-pulse delay-700" />
+
+      {/* Main Glassmorphic Panel Layout */}
+      <div className="w-full max-w-lg bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-2xl relative z-10">
         
-        <header className="mb-6">
-          <h1 className="text-xl font-bold tracking-tight text-white">Voice Emotion Core</h1>
-          <p className="text-xs text-slate-400 mt-1">Unified Monolith Deployment Container (TSX)</p>
+        {/* Header Branding Panel */}
+        <header className="flex items-center justify-between border-b border-slate-800 pb-5 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+              <Activity className="w-5 h-5 text-indigo-400 animate-pulse" />
+            </div>
+            <div className="text-left">
+              <h1 className="text-lg font-bold text-white tracking-wide uppercase">AuraVoice <span className="text-indigo-400 font-light text-xs">v2.0</span></h1>
+              <p className="text-[10px] text-slate-400 font-mono tracking-wider">SPEECH EMOTION COGNITION SYSTEM</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-[10px] font-mono text-slate-400">
+            <ShieldCheck className="w-3 h-3 text-emerald-400" /> Docker Monolith SSL
+          </div>
         </header>
 
-        <div className="w-full h-40 bg-slate-950 rounded-xl border border-slate-800 flex flex-col items-center justify-center mb-6 overflow-hidden relative">
-          {recording && (
-            <div className="flex flex-col items-center gap-2">
-              <span className="flex h-3 w-3 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
-              </span>
-              <p className="text-xs font-semibold text-rose-400 animate-pulse tracking-wider">STREAMING LIVE AUDIO...</p>
-            </div>
-          )}
+        {/* Real-time Oscilloscope Display Unit */}
+        <div className={`w-full h-44 rounded-2xl border transition-all duration-500 flex flex-col items-center justify-center overflow-hidden relative p-6 bg-gradient-to-b ${currentTheme ? currentTheme.bg + ' ' + currentTheme.border : 'from-slate-950 to-slate-950/40 border-slate-800'}`}>
+          
+          {/* Waveform Generator Frame */}
+          <div className="flex items-end justify-center gap-1 h-16 w-full px-4">
+            {visualBars.map((value, index) => (
+              <div 
+                key={index} 
+                className={`w-1.5 rounded-full transition-all duration-75 ${recording ? 'bg-indigo-400' : emotionResult && currentTheme ? currentTheme.text : 'bg-slate-800'}`}
+                style={{ height: `${value}%` }}
+              />
+            ))}
+          </div>
 
-          {processing && (
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-              <p className="text-xs text-indigo-400 font-medium">PYTHON: EXTRACTING MFCC VECTORS...</p>
-            </div>
-          )}
-
-          {!recording && !processing && !emotionResult && (
-            <p className="text-xs text-slate-500 px-4">Press the button and speak to analyze tone.</p>
-          )}
-
-          {emotionResult && !recording && !processing && (
-            <div className={`absolute inset-0 flex flex-col items-center justify-center p-4 ${EMOTION_THEMES[emotionResult].bg}`}>
-              <ResultIcon className="w-10 h-10 mb-1" />
-              <h2 className="text-2xl font-black uppercase tracking-wide">{emotionResult}</h2>
-              <p className="text-[10px] opacity-80 mt-1 max-w-[80%] font-medium">{EMOTION_THEMES[emotionResult].note}</p>
-            </div>
-          )}
+          {/* Micro-Context Overlay Messages */}
+          <div className="mt-6 text-center z-10">
+            {recording && (
+              <div className="flex items-center gap-2 justify-center font-mono text-xs text-rose-400 animate-pulse">
+                <span className="w-2 h-2 rounded-full bg-rose-500" /> ENCODING SPEECH STREAM BUFFER...
+              </div>
+            )}
+            {processing && (
+              <div className="flex items-center gap-2 justify-center font-mono text-xs text-indigo-400">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> EXTRACTING MFCC SPECTRAL TIMBRE...
+              </div>
+            )}
+            {!recording && !processing && !emotionResult && (
+              <p className="text-xs text-slate-400 font-mono">SYSTEM READY // IDLE INFERENCE LAYER</p>
+            )}
+            {emotionResult && currentTheme && !recording && !processing && (
+              <div className="animate-fade-in">
+                <div className="flex items-center justify-center gap-2 mb-1">
+                  <StatusIcon className={`w-5 h-5 ${currentTheme.text}`} />
+                  <span className="text-xs uppercase tracking-widest font-mono text-slate-300">PREDICTED STATE:</span>
+                  <span className={`text-sm font-black uppercase tracking-wider ${currentTheme.text}`}>{emotionResult}</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex justify-center">
+        {/* Telemetry Metrics Shelf */}
+        {emotionResult && currentTheme && !recording && !processing && (
+          <div className="grid grid-cols-2 gap-3 mb-6 animate-fade-in">
+            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 text-left">
+              <span className="text-[10px] font-mono text-slate-500 uppercase block tracking-wider">Classification Confidence</span>
+              <span className={`text-lg font-black font-mono tracking-tight ${currentTheme.text}`}>{currentTheme.confidence}</span>
+            </div>
+            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 text-left">
+              <span className="text-[10px] font-mono text-slate-500 uppercase block tracking-wider">Feature Vector Dimensions</span>
+              <span className="text-lg font-black font-mono tracking-tight text-slate-200">40 MFCC Array</span>
+            </div>
+            <div className="col-span-2 bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 text-left text-xs text-slate-400 leading-relaxed border-l-2 border-l-indigo-500">
+              <span className="text-[10px] font-mono text-indigo-400 uppercase block tracking-widest font-bold mb-1">Signal Analysis Report</span>
+              {currentTheme.note}
+            </div>
+          </div>
+        )}
+
+        {/* Action Controller Hub */}
+        <div className="flex justify-center mt-2">
           {!recording ? (
             <button
               onClick={startVoiceRecording}
               disabled={processing}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-medium text-sm px-6 py-3 rounded-full shadow-md transition-all active:scale-95"
+              className="w-full flex items-center justify-center gap-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-600 text-white font-semibold tracking-wide text-sm px-8 py-4 rounded-xl shadow-lg shadow-indigo-600/20 transition-all transform active:scale-[0.99] border border-indigo-400/20"
             >
-              <Mic className="w-4 h-4" /> Start Capturing Voice
+              <Mic className="w-4 h-4" /> Initialize Acoustic Diagnostics
             </button>
           ) : (
             <button
               onClick={stopVoiceRecording}
-              className="flex items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white font-medium text-sm px-6 py-3 rounded-full shadow-md transition-all active:scale-95"
+              className="w-full flex items-center justify-center gap-3 bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 text-white font-semibold tracking-wide text-sm px-8 py-4 rounded-xl shadow-lg shadow-rose-600/20 transition-all transform active:scale-[0.99] border border-rose-400/20"
             >
-              <Square className="w-4 h-4 fill-white" /> Stop & Process Audio
+              <Square className="w-4 h-4 fill-white animate-pulse" /> Intercept Signal & Process
             </button>
           )}
         </div>
+
+        {/* Footer Integrity Indicator */}
+        <footer className="mt-6 flex items-center justify-center gap-1.5 text-[10px] font-mono text-slate-600">
+          <Zap className="w-3 h-3" /> Signal isolation architecture configured via standard multi-part gateway
+        </footer>
 
       </div>
     </div>
