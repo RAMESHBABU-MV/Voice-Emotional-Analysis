@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Mic, Square, Smile, Frown, Flame, Volume2, HelpCircle } from 'lucide-react';
 
-// Explicitly define our supported emotion keys
 type Emotion = 'Happy' | 'Sad' | 'Angry' | 'Calm';
 
 interface ThemeConfig {
@@ -28,7 +27,6 @@ export default function App(): React.JSX.Element {
   const [processing, setProcessing] = useState<boolean>(false);
   const [emotionResult, setEmotionResult] = useState<Emotion | null>(null);
 
-  // Strongly type our browser recording references
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -48,7 +46,6 @@ export default function App(): React.JSX.Element {
       };
 
       mediaRecorder.onstop = async () => {
-        // Stop all hardware tracks to turn off the user's mic light
         stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
         const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType });
         await uploadAudioToBackend(audioBlob);
@@ -75,6 +72,7 @@ export default function App(): React.JSX.Element {
     formData.append('file', blob, 'recording.raw');
 
     try {
+      // Relative path routes seamlessly to the companion container endpoint
       const response = await fetch('/api/predict', {
         method: 'POST',
         body: formData,
@@ -88,13 +86,12 @@ export default function App(): React.JSX.Element {
       }
     } catch (error) {
       console.error("Transmission failed:", error);
-      alert("Error reaching Python Serverless instance.");
+      alert("Error reaching Python container pipeline.");
     } finally {
       setProcessing(false);
     }
   };
 
-  // Resolve the visual component icon type dynamically
   const ResultIcon = emotionResult ? EMOTION_THEMES[emotionResult].icon : HelpCircle;
 
   return (
@@ -103,7 +100,7 @@ export default function App(): React.JSX.Element {
         
         <header className="mb-6">
           <h1 className="text-xl font-bold tracking-tight text-white">Voice Emotion Core</h1>
-          <p className="text-xs text-slate-400 mt-1">Vercel Serverless Architecture (TSX)</p>
+          <p className="text-xs text-slate-400 mt-1">Unified Monolith Deployment Container (TSX)</p>
         </header>
 
         <div className="w-full h-40 bg-slate-950 rounded-xl border border-slate-800 flex flex-col items-center justify-center mb-6 overflow-hidden relative">
