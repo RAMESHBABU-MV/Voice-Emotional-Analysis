@@ -1,0 +1,4 @@
+fastapi
+librosa
+numpy
+soundfile
