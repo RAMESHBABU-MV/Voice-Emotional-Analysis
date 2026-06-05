@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-type Emotion = 'Happy' | 'Sad' | 'Angry' | 'Calm';
-type AppState = 'idle' | 'recording' | 'processing' | 'result';
-type Theme = 'light' | 'dark';
+// ─── Types ────────────────────────────────────────────────────────────────────
+type Emotion   = 'Happy' | 'Sad' | 'Angry' | 'Calm';
+type AppState  = 'idle' | 'recording' | 'processing' | 'result';
+type Theme     = 'light' | 'dark';
 
 interface EmotionConfig {
   icon: string;
@@ -14,116 +16,96 @@ interface EmotionConfig {
   chipDark:  { bg: string; color: string };
 }
 
+interface ApiResponse {
+  success: boolean;
+  prediction: Emotion;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+const BAR_COUNT = 26;
+
 const EMOTION_CONFIG: Record<Emotion, EmotionConfig> = {
   Happy: {
-    icon: '😊',
-    barColor: '#34d399',
-    borderColor: '#34d399',
-    confidence: '94.2%',
+    icon: '😊', barColor: '#34d399', borderColor: '#34d399', confidence: '94.2%',
     note: 'High-frequency energy with vibrant pitch variability detected.',
     chipLight: { bg: '#d1fae5', color: '#065f46' },
     chipDark:  { bg: '#064e3b', color: '#6ee7b7' },
   },
   Sad: {
-    icon: '😢',
-    barColor: '#60a5fa',
-    borderColor: '#60a5fa',
-    confidence: '88.7%',
+    icon: '😢', barColor: '#60a5fa', borderColor: '#60a5fa', confidence: '88.7%',
     note: 'Subdued amplitude envelopes and low fundamental vocal frequencies.',
     chipLight: { bg: '#dbeafe', color: '#1e3a8a' },
     chipDark:  { bg: '#1e3a8a', color: '#93c5fd' },
   },
   Angry: {
-    icon: '😠',
-    barColor: '#f87171',
-    borderColor: '#f87171',
-    confidence: '91.5%',
+    icon: '😠', barColor: '#f87171', borderColor: '#f87171', confidence: '91.5%',
     note: 'High RMS energy spikes and intense harmonic tension recorded.',
     chipLight: { bg: '#fee2e2', color: '#7f1d1d' },
     chipDark:  { bg: '#7f1d1d', color: '#fca5a5' },
   },
   Calm: {
-    icon: '😌',
-    barColor: '#a78bfa',
-    borderColor: '#a78bfa',
-    confidence: '96.1%',
+    icon: '😌', barColor: '#a78bfa', borderColor: '#a78bfa', confidence: '96.1%',
     note: 'Uniform spectral flux and stable fundamental frequencies sustained.',
     chipLight: { bg: '#ede9fe', color: '#4c1d95' },
     chipDark:  { bg: '#4c1d95', color: '#c4b5fd' },
   },
 };
 
-const BAR_COUNT = 26;
-
-interface ApiResponse {
-  success: boolean;
-  prediction: Emotion;
-}
-
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const TOKENS = {
   light: {
-    pageBg:        '#f9fafb',
-    panelBg:       '#ffffff',
-    panelBorder:   '#e5e7eb',
-    headerBorder:  '#f3f4f6',
-    scopeBg:       '#f9fafb',
-    scopeBorder:   '#e5e7eb',
-    metricBg:      '#f9fafb',
-    metricBorder:  '#f3f4f6',
-    badgeBg:       '#f9fafb',
-    badgeBorder:   '#e5e7eb',
-    badgeText:     '#6b7280',
-    btnBg:         '#f9fafb',
-    btnBorder:     '#e5e7eb',
-    btnText:       '#111827',
-    btnHoverBg:    '#f3f4f6',
-    textPrimary:   '#111827',
-    textSecondary: '#6b7280',
-    textMuted:     '#9ca3af',
-    barIdle:       '#d1d5db',
-    barActive:     '#818cf8',
-    iconBg:        '#f3f4f6',
-    toggleBg:      '#e5e7eb',
-    toggleKnob:    '#ffffff',
-    toggleKnobShadow: 'rgba(0,0,0,0.15)',
-    recordingBtn:  { bg: '#fee2e2', border: '#fca5a5', color: '#7f1d1d' },
+    pageBg: '#f9fafb', panelBg: '#ffffff', panelBorder: '#e5e7eb',
+    headerBorder: '#f3f4f6', scopeBg: '#f9fafb', scopeBorder: '#e5e7eb',
+    metricBg: '#f9fafb', metricBorder: '#f3f4f6', badgeBg: '#f9fafb',
+    badgeBorder: '#e5e7eb', badgeText: '#6b7280', btnBg: '#f9fafb',
+    btnBorder: '#e5e7eb', btnText: '#111827', btnHoverBg: '#f3f4f6',
+    textPrimary: '#111827', textSecondary: '#6b7280', textMuted: '#9ca3af',
+    barIdle: '#d1d5db', barActive: '#818cf8', iconBg: '#f3f4f6',
+    toggleBg: '#e5e7eb', toggleKnob: '#ffffff', toggleKnobShadow: 'rgba(0,0,0,0.15)',
+    recordingBtn: { bg: '#fee2e2', border: '#fca5a5', color: '#7f1d1d' },
   },
   dark: {
-    pageBg:        '#0f172a',
-    panelBg:       '#1e293b',
-    panelBorder:   '#334155',
-    headerBorder:  '#1e293b',
-    scopeBg:       '#0f172a',
-    scopeBorder:   '#334155',
-    metricBg:      '#0f172a',
-    metricBorder:  '#1e293b',
-    badgeBg:       '#0f172a',
-    badgeBorder:   '#334155',
-    badgeText:     '#94a3b8',
-    btnBg:         '#0f172a',
-    btnBorder:     '#334155',
-    btnText:       '#f1f5f9',
-    btnHoverBg:    '#1e293b',
-    textPrimary:   '#f1f5f9',
-    textSecondary: '#94a3b8',
-    textMuted:     '#64748b',
-    barIdle:       '#334155',
-    barActive:     '#818cf8',
-    iconBg:        '#0f172a',
-    toggleBg:      '#818cf8',
-    toggleKnob:    '#ffffff',
-    toggleKnobShadow: 'rgba(0,0,0,0.3)',
-    recordingBtn:  { bg: '#450a0a', border: '#7f1d1d', color: '#fca5a5' },
+    pageBg: '#0f172a', panelBg: '#1e293b', panelBorder: '#334155',
+    headerBorder: '#1e293b', scopeBg: '#0f172a', scopeBorder: '#334155',
+    metricBg: '#0f172a', metricBorder: '#1e293b', badgeBg: '#0f172a',
+    badgeBorder: '#334155', badgeText: '#94a3b8', btnBg: '#0f172a',
+    btnBorder: '#334155', btnText: '#f1f5f9', btnHoverBg: '#1e293b',
+    textPrimary: '#f1f5f9', textSecondary: '#94a3b8', textMuted: '#64748b',
+    barIdle: '#334155', barActive: '#818cf8', iconBg: '#0f172a',
+    toggleBg: '#818cf8', toggleKnob: '#ffffff', toggleKnobShadow: 'rgba(0,0,0,0.3)',
+    recordingBtn: { bg: '#450a0a', border: '#7f1d1d', color: '#fca5a5' },
   },
 } as const;
 
+// ─── API fn (used by useMutation) ─────────────────────────────────────────────
+async function predictEmotion(blob: Blob): Promise<Emotion> {
+  const formData = new FormData();
+  formData.append('file', blob, 'recording.raw');
+
+  const res = await fetch('/api/predict', { method: 'POST', body: formData });
+  if (!res.ok) throw new Error(`Server error: ${res.status}`);
+
+  const data: ApiResponse = await res.json();
+  if (!data.success) throw new Error('Prediction failed');
+
+  return data.prediction;
+}
+
+// ─── Demo fallback (used when API is unreachable in dev) ──────────────────────
+function randomEmotion(): Emotion {
+  const keys = Object.keys(EMOTION_CONFIG) as Emotion[];
+  return keys[Math.floor(Math.random() * keys.length)];
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 export default function App(): React.JSX.Element {
-  const [appState, setAppState]   = useState<AppState>('idle');
-  const [emotion,  setEmotion]    = useState<Emotion | null>(null);
-  const [history,  setHistory]    = useState<Emotion[]>([]);
-  const [bars,     setBars]       = useState<number[]>(new Array(BAR_COUNT).fill(8));
-  const [theme,    setTheme]      = useState<Theme>(() =>
+  const queryClient = useQueryClient();
+
+  const [appState, setAppState] = useState<AppState>('idle');
+  const [emotion,  setEmotion]  = useState<Emotion | null>(null);
+  const [history,  setHistory]  = useState<Emotion[]>([]);
+  const [bars,     setBars]     = useState<number[]>(new Array(BAR_COUNT).fill(8));
+  const [theme,    setTheme]    = useState<Theme>(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   );
 
@@ -131,8 +113,11 @@ export default function App(): React.JSX.Element {
   const audioChunksRef   = useRef<Blob[]>([]);
   const streamRef        = useRef<MediaStream | null>(null);
   const rafRef           = useRef<number | null>(null);
+  const audioCtxRef      = useRef<AudioContext | null>(null);
+  const analyserRef      = useRef<AnalyserNode | null>(null);
+  const freqDataRef      = useRef<Uint8Array | null>(null);
 
-  // Sync with OS preference changes
+  // ── OS theme sync (DOM listener — useEffect is correct here) ────────────────
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = (e: MediaQueryListEvent) => setTheme(e.matches ? 'dark' : 'light');
@@ -140,29 +125,79 @@ export default function App(): React.JSX.Element {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  // Bar animation
+  // ── Bar animation — real mic data when recording, idle/result otherwise ──────
   useEffect(() => {
-    if (appState === 'recording' || appState === 'processing') {
+    if (appState === 'recording' && analyserRef.current && freqDataRef.current) {
+      // Drive bars from the live AnalyserNode frequency data
+      const analyser = analyserRef.current;
+      const freqData = freqDataRef.current;
+      const binCount = freqData.length; // fftSize / 2
+
       const loop = () => {
-        setBars(new Array(BAR_COUNT).fill(0).map(() => Math.random() * 80 + 10));
+        analyser.getByteFrequencyData(freqData);
+        // Map BAR_COUNT evenly-spaced bins → percentage heights
+        const newBars = Array.from({ length: BAR_COUNT }, (_, i) => {
+          const bin = Math.floor((i / BAR_COUNT) * binCount);
+          // freqData values are 0-255; scale to 8-95% height
+          return 8 + (freqData[bin] / 255) * 87;
+        });
+        setBars(newBars);
         rafRef.current = requestAnimationFrame(loop);
       };
       loop();
+
+    } else if (appState === 'processing') {
+      // No mic data after stop — animate with smooth decay simulation
+      const loop = () => {
+        setBars(prev => prev.map(h => {
+          const target = Math.random() * 50 + 10;
+          return h + (target - h) * 0.15; // ease toward target
+        }));
+        rafRef.current = requestAnimationFrame(loop);
+      };
+      loop();
+
     } else {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      if (appState === 'result' && emotion) {
-        setBars(new Array(BAR_COUNT).fill(0).map(() => 10 + Math.random() * 55));
-      } else {
-        setBars(new Array(BAR_COUNT).fill(8));
-      }
+      setBars(
+        appState === 'result' && emotion
+          ? Array.from({ length: BAR_COUNT }, () => 10 + Math.random() * 55)
+          : new Array(BAR_COUNT).fill(8)
+      );
     }
+
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [appState, emotion]);
 
-  const t = TOKENS[theme];
-  const cfg = emotion ? EMOTION_CONFIG[emotion] : null;
+  // ── TanStack Query: useMutation for the /api/predict POST ───────────────────
+  const predictionMutation = useMutation({
+    mutationFn: predictEmotion,
 
-  // ─── Recording logic ────────────────────────────────────────────────────────
+    onMutate: () => {
+      // Transition to processing state as soon as the mutation fires
+      setAppState('processing');
+    },
+
+    onSuccess: (predicted: Emotion) => {
+      setEmotion(predicted);
+      setHistory(prev => [predicted, ...prev].slice(0, 5));
+      setAppState('result');
+      // Cache the latest result under a stable key so other components can
+      // subscribe to it via useQuery('lastPrediction') if needed
+      queryClient.setQueryData(['lastPrediction'], predicted);
+    },
+
+    onError: () => {
+      // Dev fallback: treat API failure as a random demo result
+      const demo = randomEmotion();
+      setEmotion(demo);
+      setHistory(prev => [demo, ...prev].slice(0, 5));
+      setAppState('result');
+      queryClient.setQueryData(['lastPrediction'], demo);
+    },
+  });
+
+  // ── Recording logic ──────────────────────────────────────────────────────────
   const handleBtn = async () => {
     if (appState === 'idle' || appState === 'result') await startRecording();
     else if (appState === 'recording') stopRecording();
@@ -173,16 +208,36 @@ export default function App(): React.JSX.Element {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       audioChunksRef.current = [];
+
+      // ── Web Audio analyser — drives the real-time waveform bars ──
+      const audioCtx = new AudioContext();
+      audioCtxRef.current = audioCtx;
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;           // 128 frequency bins
+      analyser.smoothingTimeConstant = 0.8; // gentle smoothing between frames
+      const source = audioCtx.createMediaStreamSource(stream);
+      source.connect(analyser);
+      analyserRef.current = analyser;
+      freqDataRef.current = new Uint8Array(analyser.frequencyBinCount);
+
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
+
       mediaRecorder.ondataavailable = (e: BlobEvent) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
-      mediaRecorder.onstop = async () => {
+
+      mediaRecorder.onstop = () => {
         stream.getTracks().forEach(t => t.stop());
+        // Close the AudioContext now that recording is done
+        audioCtxRef.current?.close();
+        audioCtxRef.current = null;
+        analyserRef.current = null;
+        freqDataRef.current = null;
         const blob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType });
-        await uploadAudio(blob);
+        predictionMutation.mutate(blob);
       };
+
       mediaRecorder.start(250);
       setAppState('recording');
     } catch {
@@ -193,44 +248,21 @@ export default function App(): React.JSX.Element {
   const stopRecording = () => {
     if (mediaRecorderRef.current && appState === 'recording') {
       mediaRecorderRef.current.stop();
-      setAppState('processing');
+      // appState transitions to 'processing' via mutation.onMutate
     }
   };
 
-  const uploadAudio = async (blob: Blob) => {
-    const formData = new FormData();
-    formData.append('file', blob, 'recording.raw');
-    try {
-      const res = await fetch('/api/predict', { method: 'POST', body: formData });
-      if (!res.ok) throw new Error('Server error');
-      const data: ApiResponse = await res.json();
-      if (data.success) {
-        setEmotion(data.prediction);
-        setHistory(prev => [data.prediction, ...prev].slice(0, 5));
-        setAppState('result');
-      } else throw new Error('Bad response');
-    } catch {
-      const keys = Object.keys(EMOTION_CONFIG) as Emotion[];
-      const demo = keys[Math.floor(Math.random() * keys.length)];
-      setEmotion(demo);
-      setHistory(prev => [demo, ...prev].slice(0, 5));
-      setAppState('result');
-    }
-  };
+  // ── Derived values ───────────────────────────────────────────────────────────
+  const t          = TOKENS[theme];
+  const isDark     = theme === 'dark';
+  const cfg        = emotion ? EMOTION_CONFIG[emotion] : null;
+  const chipColors = cfg ? (isDark ? cfg.chipDark : cfg.chipLight) : null;
+  const isAnimating = appState === 'recording' || appState === 'processing';
 
-  // ─── Derived styles ─────────────────────────────────────────────────────────
-  const scopeBorderColor =
-    appState === 'result' && cfg ? cfg.borderColor : t.scopeBorder;
+  const scopeBorderColor = appState === 'result' && cfg ? cfg.borderColor : t.scopeBorder;
+  const barColor = isAnimating ? t.barActive : appState === 'result' && cfg ? cfg.barColor : t.barIdle;
 
-  const getBarColor = (): string => {
-    if (appState === 'recording' || appState === 'processing') return t.barActive;
-    if (appState === 'result' && cfg) return cfg.barColor;
-    return t.barIdle;
-  };
-
-  const barColor = getBarColor();
-
-  // ─── Scope label ────────────────────────────────────────────────────────────
+  // ── Scope label ──────────────────────────────────────────────────────────────
   const renderScopeLabel = () => {
     if (appState === 'recording') return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#f87171' }}>
@@ -238,7 +270,7 @@ export default function App(): React.JSX.Element {
         Encoding speech buffer…
       </div>
     );
-    if (appState === 'processing') return (
+    if (appState === 'processing' || predictionMutation.isPending) return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#818cf8' }}>
         <span style={{ animation: 'av-spin 1s linear infinite', display: 'inline-block' }}>⟳</span>
         Extracting MFCC features…
@@ -251,10 +283,13 @@ export default function App(): React.JSX.Element {
         <strong style={{ color: cfg.barColor }}>{emotion}</strong>
       </div>
     );
+    if (predictionMutation.isError) return (
+      <span style={{ fontSize: 12, color: '#f87171' }}>Prediction failed — using demo result</span>
+    );
     return <span style={{ fontSize: 12, color: t.textMuted }}>System ready</span>;
   };
 
-  // ─── Button ─────────────────────────────────────────────────────────────────
+  // ── Button ───────────────────────────────────────────────────────────────────
   const btnBase: React.CSSProperties = {
     width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
     gap: 8, padding: '11px 0', borderRadius: 8,
@@ -266,13 +301,11 @@ export default function App(): React.JSX.Element {
   const renderButton = () => {
     if (appState === 'recording') return (
       <button onClick={handleBtn} className="av-btn" style={{
-        ...btnBase,
-        background: t.recordingBtn.bg,
-        borderColor: t.recordingBtn.border,
-        color: t.recordingBtn.color,
+        ...btnBase, background: t.recordingBtn.bg,
+        borderColor: t.recordingBtn.border, color: t.recordingBtn.color,
       }}>⏹ Stop & analyse</button>
     );
-    if (appState === 'processing') return (
+    if (appState === 'processing' || predictionMutation.isPending) return (
       <button disabled style={{ ...btnBase, opacity: 0.5, cursor: 'default' }}>
         ⟳ Analysing…
       </button>
@@ -284,13 +317,7 @@ export default function App(): React.JSX.Element {
     );
   };
 
-  // ─── Theme toggle ────────────────────────────────────────────────────────────
-  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  const isDark = theme === 'dark';
-
-  // ─── Chip colors ─────────────────────────────────────────────────────────────
-  const chipColors = cfg ? (isDark ? cfg.chipDark : cfg.chipLight) : null;
-
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <>
       <style>{`
@@ -321,36 +348,27 @@ export default function App(): React.JSX.Element {
             borderBottom: `1px solid ${t.headerBorder}`,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: 8, background: t.iconBg,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
-              }}>📡</div>
+              <div style={{ width: 36, height: 36, borderRadius: 8, background: t.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📡</div>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 500, color: t.textPrimary }}>
-                  AuraVoice{' '}
-                  <span style={{ fontWeight: 400, fontSize: 12, color: t.textMuted }}>v2.0</span>
+                  AuraVoice <span style={{ fontWeight: 400, fontSize: 12, color: t.textMuted }}>v2.0</span>
                 </div>
-                <div style={{ fontSize: 11, color: t.textMuted, letterSpacing: '0.05em' }}>
-                  Speech emotion cognition
-                </div>
+                <div style={{ fontSize: 11, color: t.textMuted, letterSpacing: '0.05em' }}>Speech emotion cognition</div>
               </div>
             </div>
 
-            {/* Right: SSL badge + theme toggle */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '4px 10px', borderRadius: 999,
-                border: `1px solid ${t.badgeBorder}`, background: t.badgeBg,
+                display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px',
+                borderRadius: 999, border: `1px solid ${t.badgeBorder}`, background: t.badgeBg,
                 fontSize: 11, color: t.badgeText,
               }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
                 SSL
               </div>
 
-              {/* Toggle switch */}
               <button
-                onClick={toggleTheme}
+                onClick={() => setTheme(p => p === 'light' ? 'dark' : 'light')}
                 aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
                 style={{
                   position: 'relative', width: 40, height: 22, borderRadius: 999,
@@ -359,14 +377,11 @@ export default function App(): React.JSX.Element {
                 }}
               >
                 <span style={{
-                  position: 'absolute', top: 3,
-                  left: isDark ? 21 : 3,
+                  position: 'absolute', top: 3, left: isDark ? 21 : 3,
                   width: 16, height: 16, borderRadius: '50%',
-                  background: t.toggleKnob,
-                  boxShadow: `0 1px 3px ${t.toggleKnobShadow}`,
-                  transition: 'left 0.25s',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 9,
+                  background: t.toggleKnob, boxShadow: `0 1px 3px ${t.toggleKnobShadow}`,
+                  transition: 'left 0.25s', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', fontSize: 9,
                 }}>
                   {isDark ? '🌙' : '☀️'}
                 </span>
@@ -376,10 +391,8 @@ export default function App(): React.JSX.Element {
 
           {/* ── Oscilloscope ── */}
           <div style={{
-            height: 140, borderRadius: 12,
-            border: `1px solid ${scopeBorderColor}`,
-            background: t.scopeBg,
-            display: 'flex', flexDirection: 'column',
+            height: 140, borderRadius: 12, border: `1px solid ${scopeBorderColor}`,
+            background: t.scopeBg, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center', gap: 12,
             padding: '1.25rem', marginBottom: '1rem',
             transition: 'border-color 0.4s, background 0.3s',
@@ -387,11 +400,8 @@ export default function App(): React.JSX.Element {
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 52 }}>
               {bars.map((h, i) => (
                 <div key={i} style={{
-                  width: 5, borderRadius: 3, height: `${h}%`,
-                  background: barColor,
-                  transition: appState === 'recording' || appState === 'processing'
-                    ? 'height 0.07s ease'
-                    : 'height 0.4s ease, background 0.4s',
+                  width: 5, borderRadius: 3, height: `${h}%`, background: barColor,
+                  transition: isAnimating ? 'height 0.07s ease' : 'height 0.4s ease, background 0.4s',
                 }} />
               ))}
             </div>
@@ -403,9 +413,8 @@ export default function App(): React.JSX.Element {
             <div style={{ marginBottom: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', marginBottom: 10 }}>
                 <div style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '3px 12px', borderRadius: 999,
-                  fontSize: 13, fontWeight: 500,
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '3px 12px',
+                  borderRadius: 999, fontSize: 13, fontWeight: 500,
                   background: chipColors.bg, color: chipColors.color,
                   transition: 'background 0.3s, color 0.3s',
                 }}>
@@ -415,41 +424,20 @@ export default function App(): React.JSX.Element {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {/* Confidence */}
-                <div style={{
-                  background: t.metricBg, border: `1px solid ${t.metricBorder}`,
-                  borderRadius: 8, padding: '0.75rem 1rem',
-                  transition: 'background 0.3s',
-                }}>
+                <div style={{ background: t.metricBg, border: `1px solid ${t.metricBorder}`, borderRadius: 8, padding: '0.75rem 1rem', transition: 'background 0.3s' }}>
                   <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 4 }}>Confidence</div>
-                  <div style={{ fontSize: 20, fontWeight: 500, color: t.textPrimary, fontFamily: 'monospace' }}>
-                    {cfg.confidence}
-                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 500, color: t.textPrimary, fontFamily: 'monospace' }}>{cfg.confidence}</div>
                 </div>
-
-                {/* Feature vector */}
-                <div style={{
-                  background: t.metricBg, border: `1px solid ${t.metricBorder}`,
-                  borderRadius: 8, padding: '0.75rem 1rem',
-                  transition: 'background 0.3s',
-                }}>
+                <div style={{ background: t.metricBg, border: `1px solid ${t.metricBorder}`, borderRadius: 8, padding: '0.75rem 1rem', transition: 'background 0.3s' }}>
                   <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 4 }}>Feature vector</div>
-                  <div style={{ fontSize: 15, fontWeight: 500, color: t.textPrimary, fontFamily: 'monospace', paddingTop: 3 }}>
-                    40 MFCC
-                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: t.textPrimary, fontFamily: 'monospace', paddingTop: 3 }}>40 MFCC</div>
                 </div>
-
-                {/* Signal report */}
                 <div style={{
-                  gridColumn: 'span 2',
-                  background: t.metricBg, border: `1px solid ${t.metricBorder}`,
-                  borderLeft: '2px solid #818cf8', borderRadius: 8,
-                  padding: '0.75rem 1rem',
-                  transition: 'background 0.3s',
+                  gridColumn: 'span 2', background: t.metricBg,
+                  border: `1px solid ${t.metricBorder}`, borderLeft: '2px solid #818cf8',
+                  borderRadius: 8, padding: '0.75rem 1rem', transition: 'background 0.3s',
                 }}>
-                  <div style={{ fontSize: 10, color: t.textMuted, letterSpacing: '0.06em', marginBottom: 4 }}>
-                    Signal analysis
-                  </div>
+                  <div style={{ fontSize: 10, color: t.textMuted, letterSpacing: '0.06em', marginBottom: 4 }}>Signal analysis</div>
                   <div style={{ fontSize: 12, color: t.textSecondary, lineHeight: 1.6 }}>{cfg.note}</div>
                 </div>
               </div>
@@ -463,9 +451,8 @@ export default function App(): React.JSX.Element {
               {history.slice(1).map((e, i) => (
                 <span key={i} style={{
                   fontSize: 11, padding: '2px 10px', borderRadius: 999,
-                  border: `1px solid ${t.badgeBorder}`,
-                  color: t.badgeText, background: t.badgeBg,
-                  transition: 'background 0.3s',
+                  border: `1px solid ${t.badgeBorder}`, color: t.badgeText,
+                  background: t.badgeBg, transition: 'background 0.3s',
                 }}>
                   {EMOTION_CONFIG[e].icon} {e}
                 </span>
@@ -477,10 +464,7 @@ export default function App(): React.JSX.Element {
           {renderButton()}
 
           {/* ── Footer ── */}
-          <div style={{
-            marginTop: '1rem', fontSize: 11, color: t.textMuted,
-            display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'center',
-          }}>
+          <div style={{ marginTop: '1rem', fontSize: 11, color: t.textMuted, display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'center' }}>
             🔒 Audio processed locally — not stored
           </div>
 
